@@ -179,7 +179,8 @@ class F1tenthDatasetEnv(F110Env):
 
         assert start_idx == batch.shape[1], "Mismatch in the number of columns"
         return batch_dict
-    
+    def flatten_batch(self,batch):
+        pass
     
     """
     def unflatten_batch(self, batch):
