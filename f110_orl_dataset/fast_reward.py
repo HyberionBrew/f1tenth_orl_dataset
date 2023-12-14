@@ -1,8 +1,8 @@
 import numpy as np
-from .config_new import Config
+
 from f110_gym.envs.track import Track
 import gymnasium as gym
-
+from f110_orl_dataset.normalize_dataset import Normalize
 class ProgressReward:
     def __init__(self, multiplier=100.0):
         self.multiplier = multiplier
@@ -231,6 +231,7 @@ def calculate_reward(config, dataset, env, track):
     return all_rewards
 
 def test_progress_reward():
+    from .config_new import Config
     config = Config('reward_config.json')
 
     F110Env = gym.make('f110_with_dataset-v0',
@@ -288,6 +289,7 @@ def create_batch(obs_steps_t, action_steps_t, done_t, truncate_t, i):
     return obs_steps, action_steps, done, truncate
 
 def test_online_batch_reward():
+    from .config_new import Config
     config = Config('reward_config.json')
     stepMixedReward = StepMixedReward(config)
 
@@ -356,6 +358,7 @@ def test_online_batch_reward():
     # apply the reward in batch
 
 def test_reward(config_file, dataset_folder):
+    from .config_new import Config
     config = Config(config_file)
     
     # stepMixedReward = StepMixedReward(config)
@@ -373,6 +376,7 @@ def test_reward(config_file, dataset_folder):
                 include_timesteps_in_obs=True,
                 only_terminals=False,
                 )
+    normalizer = Normalize()
     print(config)
     all_rewards = calculate_reward(config, dataset, F110Env, F110Env.track)
 
@@ -404,8 +408,127 @@ def test_reward(config_file, dataset_folder):
     assert len(indices) == 0
     print(f"[{dataset_folder}] Test passed")
 
+def sparse_reward(dataset):
+    progress = dataset["observations"][:,-2:]
+    # calculate the progress
+    print(progress.shape)
+    progress = np.arctan2(progress[...,0], progress[...,1])
+    # from [-pi, pi] to [0, 1]
+    progress += np.pi
+    progress = progress / (2*np.pi)
+    # or truncated and dones
+    finished = np.logical_or(dataset["terminals"], dataset["timeouts"])
+    starts = np.roll(finished, 1)
+
+    starts = np.where(starts==1)[0]
+    ends = np.where(finished==1)[0]
+    rewards = np.zeros_like(progress)
+    print(rewards.shape)
+    print("...")
+    for start,end in zip(starts,ends):
+        # find all loopbacks
+        #print(start, end)
+        progress_slice = progress[start:end+1].copy()
+        rewards_slice = rewards[start:end+1].copy()
+        differences = np.diff(progress[start:end+1])
+        # find where there is a diff of larger than 0.5, in these cases we have a loopback
+        # and must add 1 to all subsequent progress values
+        # find where differences < -0.5
+        indices = np.where(differences < -0.5)[0]
+        #print(indices)
+        #print(differences)
+        #plt.plot(progress_slice)
+        #plt.show()
+        # add 1 to all subsequent progress values
+        for index in indices[::-1]:
+            #print(progress_slice[index])
+            #print(progress_slice[index+1])
+            progress_slice[index+1:] += progress_slice[index]
+            #print(progress_slice[index])
+            #print(progress_slice[index+1])
+            #print(index)
+        without_offset = progress_slice- progress_slice[0]
+        max_threshold = np.floor(without_offset[-1] * 10) / 10
+
+        # Generate an array of thresholds to check
+        thresholds = np.arange(0.1, max_threshold + 0.1, 0.1)
+        # print(thresholds)
+        # Find the first index where the array value exceeds each threshold
+        first_exceedances = np.array([np.argmax(without_offset >= threshold) for threshold in thresholds])
+        #print(first_exceedances)
+        #print(first_exceedances)
+        if len(first_exceedances) > 0:
+            rewards_slice[first_exceedances] = 10.0
+            rewards[start:end+1] = rewards_slice
+    #import matplotlib.pyplot as plt
+    #plt.plot(rewards)
+    #plt.show()
+    return rewards
+def test_sparse_reward(dataset_folder):
+    F110Env = gym.make('f110_with_dataset-v0',
+    # only terminals are available as of tight now 
+        **dict(name='f110_with_dataset-v0',
+            config = dict(map="Infsaal", num_agents=1),
+            render_mode="human")
+    )
+
+    dataset =  F110Env.get_dataset(
+                zarr_path= f"/home/fabian/msc/f110_dope/ws_ope/f1tenth_orl_dataset/data/{dataset_folder}", 
+                alternate_reward=False,
+                include_timesteps_in_obs=True,
+                only_terminals=False,
+                # clip_trajectory_length =(0,500),
+                )
+    reward = sparse_reward(dataset)
+    print(reward)
+    # create histogram of number of ones in reward, bin size 1000
+    import matplotlib.pyplot as plt
+    chunk_size = 10000
+    chunk_sums = [np.sum(reward[i:i + chunk_size]) for i in range(0, len(reward), chunk_size)]
+
+    # Create the plot
+    plt.plot(chunk_sums)
+    plt.xlabel('Time (in chunks of 1000 timesteps)')
+    plt.ylabel('Sum of values per chunk')
+    plt.title('Aggregated Timeseries Data')
+    plt.show()
+
+import zarr
 if __name__ == "__main__":
+    dataset_folder = "trajectories_1112.zarr"
+    F110Env = gym.make('f110_with_dataset-v0',
+    # only terminals are available as of tight now 
+        **dict(name='f110_with_dataset-v0',
+            config = dict(map="Infsaal", num_agents=1),
+            render_mode="human")
+    )
+    zarr_path = f"/home/fabian/msc/f110_dope/ws_ope/f1tenth_orl_dataset/data/{dataset_folder}"
+    dataset =  F110Env.get_dataset(
+                zarr_path= zarr_path, 
+                alternate_reward=False,
+                include_timesteps_in_obs=True,
+                only_terminals=False,
+                #clip_trajectory_length =,#(0,500),
+                )
+    new_rewards = sparse_reward(dataset)
+    
+    root = zarr.open(zarr_path, mode='wr')
+    root["new_rewards"] = new_rewards
+    print(root["new_rewards"].shape)
+    print(root["rewards"].shape)
+    reward = root["new_rewards"]
+
+    import matplotlib.pyplot as plt
+    chunk_size = 10000
+    chunk_sums = [np.sum(reward[i:i + chunk_size]) for i in range(0, len(reward), chunk_size)]
+
+    # Create the plot
+    plt.plot(chunk_sums)
+    plt.xlabel('Time (in chunks of 1000 timesteps)')
+    plt.ylabel('Sum of values per chunk')
+    plt.title('Aggregated Timeseries Data')
+    plt.show()
     #test_progress_reward()
     # test_online_batch_reward()
     #test_reward("reward_min_act.json", "trajectories_min_act.zarr")
-    test_reward("reward_raceline.json", "trajectories_raceline.zarr")
+    # test_reward("reward_raceline.json", "trajectories_raceline.zarr")
