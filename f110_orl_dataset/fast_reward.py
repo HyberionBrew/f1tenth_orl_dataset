@@ -154,7 +154,7 @@ class StepMixedReward:
     obs need to have the following shape: (batch, 1, obs_dim) (since we only do stepwise)
     """
     def __call__(self, obs, action, collision, done, laser_scan=None):
-        print(obs)
+        # print(obs)
         assert len(obs.shape) == 2
         assert len(action.shape) == 2
         assert action.shape[1] == 2
@@ -188,7 +188,7 @@ class StepMixedReward:
         self.previous_action = action
         self.previous_obs = obs
         assert reward.shape == (obs.shape[0],) # we only have a batch dimension
-        print(reward)
+        # print(reward)
         return reward
 
 

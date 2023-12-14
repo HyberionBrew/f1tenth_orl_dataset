@@ -37,6 +37,7 @@ def clip(value, low, high):
     """Clip a value between low and high."""
     return np.clip(value, low, high)
 
+
 class F1tenthDatasetEnv(F110Env):
     def __init__(
         self,
@@ -312,7 +313,6 @@ class F1tenthDatasetEnv(F110Env):
             obs_return[:,i] = (observations[:,i] * self.std_obs[i]) + self.mean_obs[i]
         
         return obs_return
-
 
     def get_dataset(
         self,

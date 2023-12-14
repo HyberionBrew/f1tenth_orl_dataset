@@ -13,7 +13,7 @@ class Config:
             self.min_lidar_weight = data.get('min_lidar_weight', 0.0)
             self.raceline_delta_weight = data.get('raceline_delta_weight', 0.0)
             self.min_steering_weight = data.get('min_steering_weight', 0.0)
-
+            self.sparse_reward = data.get('sparse_reward', False)
             self.collision_penalty = data.get('collision_penalty', -10.0)
             
             # self.progress_reward_multiplier = data.get('progress_reward_multiplier', 1)
@@ -27,6 +27,9 @@ class Config:
         return self.min_lidar_weight > 1e-6
     def has_raceline_delta_reward(self):
         return self.raceline_delta_weight > 1e-6
+    
+    def has_sparse_reward(self):
+        return self.sparse_reward
     
     # not implemented yet!
     def has_min_steering_reward(self):
