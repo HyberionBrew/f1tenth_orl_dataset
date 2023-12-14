@@ -55,11 +55,15 @@ class F110Actor(object):
                     # numpy to torch tensor
                     # print(self.model.policy.device)
                     actions = torch.tensor(actions, device=self.model.policy.device) #.unsqueeze(0)
+                if not actions.device == self.model.policy.device:
+                    actions = actions.to(self.model.policy.device)
                 # TODO! check what the actions shape is and should be
                 # print(actions.shape)
                 
                 obs_tensor, _ = self.model.policy.obs_to_tensor(obs)
-                # print(obs_tensor)
+                #print(obs_tensor)
+                #print(actions.device)
+                #print(self.model.policy.device)
                 _, log_prob, _ = self.model.policy.evaluate_actions(obs_tensor, actions)
                 # flatten log_prob
                 log_prob = log_prob.flatten()

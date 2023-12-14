@@ -80,17 +80,20 @@ class Normalize:
         return batch_dict
     
     def flatten_batch(self, batch_dict):
-        batch = np.zeros((len(batch_dict[list(batch_dict.keys())[0]]), self.state_space.shape[0]))
-        print(batch.shape)
+        batch = np.zeros((len(batch_dict["poses_x"]), 11))
+        # print(batch.shape)
+        i = 0
         for key, obs in self.state_space.spaces.items():
             # Calculate how many columns this part of the observation takes up
+            
             space_shape = np.prod(obs.shape)
             # Slice the appropriate columns from the batch
             batch_slice = batch_dict[key]
             # If the space has multi-dimensions, reshape it accordingly
             if len(obs.shape) > 1:
                 batch_slice = batch_slice.reshape((-1, space_shape))
-            batch[:, :space_shape] = batch_slice
+            batch[:, i:i+space_shape] = batch_slice
+            i = i + space_shape
         return batch
     
     def normalize_obs_batch(self, batch_dict):

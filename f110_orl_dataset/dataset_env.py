@@ -471,7 +471,7 @@ class F1tenthDatasetEnv(F110Env):
             data_dict['terminals'] = truncated_or_terminals
             data_dict['timeouts'] = truncated_or_terminals
         if sample_from_trajectories!=0:
-            data_dict = skip_trajectories(data_dict, keep=sample_from_trajectories)
+            data_dict = self.skip_trajectories(data_dict, keep=sample_from_trajectories)
         if include_timesteps_in_obs:
             data_dict = self.timesteps_to_dict(data_dict)
 
@@ -597,7 +597,10 @@ class F1tenthDatasetEnv(F110Env):
 
         # Keep only every 'keep'-th trajectory
         for i in range(0, len(start_indices) - 1, keep):
-            start, end = start_indices[i], start_indices[min(i + keep, len(start_indices) - 1)]
+            if i +1 > len(start_indices) - 1:
+                break
+
+            start, end = start_indices[i], start_indices[i + 1]
 
             for key, value in data_dict.items():
                 if key == 'infos':
