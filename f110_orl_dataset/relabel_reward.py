@@ -38,6 +38,7 @@ if __name__ == "__main__":
         root['new_reward'] = new_rewards
     else:
         new_rewards = fast_reward.calculate_reward(reward_config, dataset, F110Env, F110Env.track)
+        new_rewards *= 10.0
         new_rewards = np.squeeze(new_rewards, axis=0)
 
         root['new_rewards'] = new_rewards
