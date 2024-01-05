@@ -3,6 +3,7 @@ import numpy as np
 from f110_gym.envs.track import Track
 import gymnasium as gym
 from f110_orl_dataset.normalize_dataset import Normalize
+
 class ProgressReward:
     def __init__(self, multiplier=100.0):
         self.multiplier = multiplier
@@ -62,8 +63,30 @@ class MinActReward:
 class MinLidarReward:
     def __init__(self, high=0.15):
         self.high = high
-    def __call__(self,obs):
-        pass
+    def __call__(self,obs,action, laser_scan):
+        #print("called min lidar reward")
+        #print("laser scan shape", laser_scan.shape)
+        laser_scan = laser_scan[...,:]
+        # remove all one dimensions
+        laser_scan= np.squeeze(laser_scan)
+        # sort along axis 1
+        laser_scan = np.sort(laser_scan, axis=1) 
+        # take the 3d smallest value
+        min_lidar = laser_scan[...,2]
+        # normalize between 0 and 1
+        # first clip
+        min_lidar = np.clip(min_lidar, 0, self.high)
+        # normalize
+        min_lidar = min_lidar / self.high
+        min_ray = min_lidar **4
+        #print(min_ray.shape)
+        #print(min_ray)
+        reward = min_ray
+        #print("reward scan shape", reward.shape)
+        # add a 1 dimension at the start
+        reward = np.expand_dims(reward, axis=0)
+        assert reward.shape == (obs.shape[0], obs.shape[1])
+        return reward
 
 class RacelineDeltaReward:
     def __init__(self, track:Track, max_delta=2.0):
@@ -115,6 +138,8 @@ class MixedReward:
         if config.has_min_lidar_reward():
             self.rewards.append(MinLidarReward())
         if config.has_raceline_delta_reward():
+            print("track length", len(self.env.track.centerline.xs))
+            print("track length", len(self.env.track.raceline.xs))
             self.rewards.append(RacelineDeltaReward(self.env.track))
         if config.has_min_steering_reward():
             pass
@@ -180,7 +205,7 @@ class StepMixedReward:
         collision = np.concatenate([collision, collision], axis=1)
         done = np.concatenate([done, done], axis=1)
         # now we can apply the mixed reward
-        reward, _ = self.mixedReward(obs_t2, action_t2, collision, done)
+        reward, _ = self.mixedReward(obs_t2, action_t2, collision, done, laser_scan=laser_scan)
         # now we discard the first timestep
         #print(reward)
         #print(reward.shape)
@@ -213,18 +238,21 @@ def calculate_reward(config, dataset, env, track):
     batch_act = np.split(dataset["raw_actions"][:timesteps], finished+1)
     batch_col = np.split(dataset["terminals"][:timesteps], finished+1)
     batch_ter = np.split(dataset["terminals"][:timesteps], finished+1)
-    
+    batch_laserscan = np.split(dataset["scans"][:timesteps], finished+1)
+    #print(batch_laserscan.shape)
+    #print(batch_obs.shape)
     all_rewards = np.zeros((1,0))
     
-    for batch in zip(batch_obs, batch_act, batch_col, batch_ter):
+    for batch in zip(batch_obs, batch_act, batch_col, batch_ter, batch_laserscan):
         batch = list(batch)
         for i in range(len(batch)):
             batch[i] = np.expand_dims(batch[i], axis=0)
 
         if batch[0].shape[1] <= 1:
             break
-
-        reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3])
+        #print(batch[0].shape)
+        #print(batch[4].shape)
+        reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
         #print(reward.shape)
         all_rewards = np.concatenate([all_rewards, reward], axis=1)
 
@@ -407,6 +435,24 @@ def test_reward(config_file, dataset_folder):
     print(dataset["raw_actions"][10063])
     assert len(indices) == 0
     print(f"[{dataset_folder}] Test passed")
+
+class RewardCalculator:
+    def __init__(self,config, scale = 10.0):
+        self.config = config
+        self.scale = scale
+    def forward(self, ):
+        pass
+        
+
+def reward_from_config(config_file, dataset_folder, scale = 10.0):
+    if reward_config.has_sparse_reward():
+        new_rewards = fast_reward.sparse_reward(dataset)
+        root['new_reward'] = new_rewards
+    else:
+        new_rewards = fast_reward.calculate_reward(reward_config, dataset, F110Env, F110Env.track)
+        new_rewards *= scale
+        new_rewards = np.squeeze(new_rewards, axis=0)
+
 
 def sparse_reward(dataset):
     progress = dataset["observations"][:,-2:]

@@ -67,12 +67,16 @@ class Normalize:
             space_shape = np.prod(space.shape)
             
             # Slice the appropriate columns from the batch
-            batch_slice = batch[:, start_idx:start_idx+space_shape]
-            
+            batch_slice = batch[:,start_idx:start_idx+space_shape]
+            #print(key)
+            #print(batch_slice.shape)
             # If the space has multi-dimensions, reshape it accordingly
             if len(space.shape) > 1:
-                batch_slice = batch_slice.reshape((-1,) + space.shape)
-            
+                batch_slice = batch_slice # .reshape(space.shape)
+                # print(batch_slice.shape)
+            # squeeze all 1 dimensions exepct dim 0
+            else:
+                batch_slice = np.squeeze(batch_slice, axis=1)
             batch_dict[key] = batch_slice
             start_idx += space_shape
 

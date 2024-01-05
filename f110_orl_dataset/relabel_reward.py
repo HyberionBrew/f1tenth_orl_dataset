@@ -8,6 +8,7 @@ import numpy as np
 parser = argparse.ArgumentParser(description='Your script description')
 parser.add_argument('--reward_config', type=str, default="reward_config.json", help="reward config file")
 parser.add_argument('--path', type=str, default="datasets", help="dataset name")
+parser.add_argument('--map', type=str, default="Infsaal2", help="map name")
 args = parser.parse_args()
 
 
@@ -19,7 +20,7 @@ if __name__ == "__main__":
     F110Env = gym.make('f110_with_dataset-v0',
     # only terminals are available as of tight now 
         **dict(name='f110_with_dataset-v0',
-            config = dict(map="Infsaal", num_agents=1),
+            config = dict(map=args.map, num_agents=1),
             render_mode="human")
     )
 
@@ -38,7 +39,7 @@ if __name__ == "__main__":
         root['new_reward'] = new_rewards
     else:
         new_rewards = fast_reward.calculate_reward(reward_config, dataset, F110Env, F110Env.track)
-        new_rewards *= 10.0
+        # new_rewards *= 10.0
         new_rewards = np.squeeze(new_rewards, axis=0)
 
         root['new_rewards'] = new_rewards
