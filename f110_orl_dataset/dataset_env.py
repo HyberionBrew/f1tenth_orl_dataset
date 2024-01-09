@@ -353,7 +353,7 @@ class F1tenthDatasetEnv(F110Env):
         
         if self.include_time_obs:
             temp_dataset["observations"]["timestep"] = self.add_timesteps(temp_dataset)
-            print("timesteps", temp_dataset["observations"]["timestep"][:252])
+            # print("timesteps", temp_dataset["observations"]["timestep"][:252])
 
         dataset_removed = self._remove_indices_from_dataset(temp_dataset, indices_to_remove)
 
