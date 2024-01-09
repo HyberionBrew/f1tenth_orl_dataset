@@ -65,7 +65,7 @@ The vels are currently 0. Progress is defined over the middle line of the track 
   * reward_raceline.json
   * reward_progress.json
   * reward_lidar.json
-This assigns the rewards key
+ This assigns the rewards key
 # Important Arguments for get_dataset
 - timesteps_to_include controls the timesteps of an epsiode that are included. For sim each episode has a maximum of 500, in real 250.
 - only_agents/remove_agents, allows you to only pick certain agents and remove others.
