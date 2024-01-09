@@ -15,13 +15,13 @@ class ProgressReward:
         #    return np.zeros((obs.shape[0], obs.shape[1]))
         assert len(obs.shape) == 3
         assert obs.shape[1] > 1
-        progress = obs [..., -2:]
+        progress = obs [..., -1]
         # assert progress.shape[-1] == 2
         # sin and cos progress to progress
-        progress = np.arctan2(progress[...,0], progress[...,1])
+        #progress = np.arctan2(progress[...,0], progress[...,1])
         # all where progress < 0 we add pi
-        progress += np.pi
-        progress = progress/ (2*np.pi)
+        #progress += np.pi
+        #progress = progress/ (2*np.pi)
         #print(progress.min())
         #print(progress.max())
         assert (progress.min() >= 0) and (progress.max() <= 1)
@@ -92,8 +92,13 @@ class RacelineDeltaReward:
     def __init__(self, track:Track, max_delta=2.0):
         xs = track.raceline.xs
         ys = track.raceline.ys
+        #print(xs[0])
+        #print(ys[0])
         self.raceline = np.stack([xs,ys], axis=1)
         self.largest_delta_observed = max_delta
+        #print(track)
+        #print(self.raceline)
+        #print(self.raceline.shape)
 
     def __call__(self, obs, action, laser_scan) -> float:
         pose = obs[...,:2]
@@ -116,6 +121,12 @@ class RacelineDeltaReward:
         # print(reward.shape)
         # remove last dimension
         reward = reward[...,0]
+        # plot the poses
+        if False:
+            import matplotlib.pyplot as plt
+            plt.scatter(pose[...,0], pose[...,1], color='red')
+            plt.scatter(self.raceline[...,0], self.raceline[...,1], color='blue')
+            plt.show()
         return reward
 
 # CURRENTLY DOES NOT WORK WITH LIDAR!
@@ -152,7 +163,8 @@ class MixedReward:
     def __call__(self, obs, action, collision, done, laser_scan=None):
         assert obs.shape[:-1] == action.shape[:-1]
         assert len(obs.shape) == 3
-        assert obs.shape[-1] == 11
+        print(obs.shape)
+        assert obs.shape[-1] == 7
         # need to handle laser scans somehow in the future
 
         # empty rewards array to collect the rewards
@@ -235,7 +247,7 @@ def calculate_reward(config, dataset, env, track):
 
     timesteps = None # for debugging
     batch_obs = np.split(dataset["observations"][:timesteps], finished+1)
-    batch_act = np.split(dataset["raw_actions"][:timesteps], finished+1)
+    batch_act = np.split(dataset["actions"][:timesteps], finished+1)
     batch_col = np.split(dataset["terminals"][:timesteps], finished+1)
     batch_ter = np.split(dataset["terminals"][:timesteps], finished+1)
     batch_laserscan = np.split(dataset["scans"][:timesteps], finished+1)
@@ -255,7 +267,7 @@ def calculate_reward(config, dataset, env, track):
         reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
         #print(reward.shape)
         all_rewards = np.concatenate([all_rewards, reward], axis=1)
-
+    print(all_rewards[:50])
     return all_rewards
 
 def test_progress_reward():
@@ -514,7 +526,7 @@ def test_sparse_reward(dataset_folder):
     F110Env = gym.make('f110_with_dataset-v0',
     # only terminals are available as of tight now 
         **dict(name='f110_with_dataset-v0',
-            config = dict(map="Infsaal", num_agents=1),
+            config = dict(map="Infsaal2", num_agents=1),
             render_mode="human")
     )
 

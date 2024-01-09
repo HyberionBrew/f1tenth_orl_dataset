@@ -134,9 +134,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     import gymnasium as gym
     import f110_orl_dataset
-    F110Env = gym.make('f110_with_dataset-v0',
+    F110Env = gym.make('f110-real-v0',
     # only terminals are available as of tight now 
-        **dict(name='f110_with_dataset-v0',
+        **dict(name='f110-real-v0',
             config = dict(map="Infsaal", num_agents=1),
             render_mode="human")
     )
@@ -151,6 +151,8 @@ if __name__ == "__main__":
     print(pose(0))
     progress.reset(pose(0))
     progr = []
+    first = 0
+    root["observations"]["progress"] = np.zeros_like(root['observations']["poses_x"])
     for i in tqdm(range(len(root['observations']["poses_x"]))):
         #print(progress.get_progress(pose(i)))
         curr_progress = progress.get_progress(pose(i))
@@ -158,11 +160,23 @@ if __name__ == "__main__":
         #progr.append(curr_angle)
         root["observations"]["progress_sin"][i] = np.sin(curr_angle)
         root["observations"]["progress_cos"][i] = np.cos(curr_angle)
+        root["observations"]["progress"][i] = curr_progress
         if root["done"][i] or root["truncated"][i]:
             #print(root["done"][i], root["truncated"][i])
             if i < len(root['observations']["poses_x"])-1:
                 progress.reset(pose(i+1))
-            
+            """
+            plt.plot(root["observations"]["progress"][first:first+250])
+            plt.show()
+            plt.scatter(root['observations']["poses_x"][first:first+250], root['observations']["poses_y"][first:first+250])
+            # plot x at start
+            plt.scatter(root['observations']["poses_x"][first], root['observations']["poses_y"][first], color="red")
+            plt.show()
+            print(i)
+            first = i+1
+            if i > 300:
+                exit()
+            """
             #plt.plot(np.sin(np.array(progr)), label="new_sin")
             #plt.plot(np.cos(np.array(progr)), label="new_cos")
             #plt.legend()
