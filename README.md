@@ -60,11 +60,11 @@ The vels are currently 0. Progress is defined over the middle line of the track 
 - as a name choose either the real or sim dataset
 - When using `encode_cyclic=True` progress and poses_theta are replaced with sin and cosine encoded counterparts.
 
--`include_time_obs` adds an observation that is between 0 and 1 to denote the timestep with respect to the episode.
--`reward_config` takes:
-  -reward_raceline.json
-  -reward_progress.json
-  -reward_lidar.json
+- `include_time_obs` adds an observation that is between 0 and 1 to denote the timestep with respect to the episode.
+- `reward_config` takes:
+  * reward_raceline.json
+  * reward_progress.json
+  * reward_lidar.json
 This assigns the rewards key
 # Important Arguments for get_dataset
 - timesteps_to_include controls the timesteps of an epsiode that are included. For sim each episode has a maximum of 500, in real 250.
