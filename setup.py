@@ -8,5 +8,8 @@ setup(
         # List your dependencies here
         'f110-gym',
         'zarr',
+        'gymnasium',
+        'tqdm',
+        'matplotlib',
     ],
 )
