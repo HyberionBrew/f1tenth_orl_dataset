@@ -79,7 +79,6 @@ class F1tenthDatasetEnv(F110Env):
         redownload = False, # debugging, if ds changes
         encode_cyclic = True,
         timesteps_to_include = None,
-        timesteps_in_obs = True,
         **f1tenth_kwargs
         ):
         """
@@ -124,7 +123,7 @@ class F1tenthDatasetEnv(F110Env):
         self.encode_cyclic = encode_cyclic
         self.timesteps_to_include = timesteps_to_include
         self.reward_config = reward_config
-        self.timesteps_in_obs = timesteps_in_obs
+        self.include_time_obs = include_time_obs
 
         self._local_dataset_path = None
         if agent_config_dir is None:
@@ -145,7 +144,7 @@ class F1tenthDatasetEnv(F110Env):
             print(f"Attempting download - sometimes this does not work for me - you can always download the dataset from {self.dataset_url}")
             print(f"Place it in {self.data_dir} and rename it to {self.data_dir}.zip")
             self._download_file(self.dataset_url, f"{self.data_dir}.zip")#self.data_dir)
-            
+
         if not(self.data_dir.exists()):
             self._unzip_file(f"{self.data_dir}.zip")        
        
@@ -166,10 +165,11 @@ class F1tenthDatasetEnv(F110Env):
                 state_dict[obs] = Box(0, 1, (1,), np.float32)
 
         if include_time_obs:
-            state_dict["time_step"] = Box(0, 1, (1,), np.float32)
+            state_dict["timestep"] = Box(0, 1, (1,), np.float32)
+            self.keys.append("timestep")
 
         self.state_space = gym.spaces.Dict(state_dict)
-        print(self.action_space)
+        # print(self.action_space)
         self.observation_space = self.state_space 
 
         self.observation_space_orig = self.observation_space
@@ -318,6 +318,7 @@ class F1tenthDatasetEnv(F110Env):
         temp_dataset["model_name"] = root['model_name'][:]
         temp_dataset["log_probs"] = root['log_prob'][:]
         temp_dataset["scans"] = root["observations"]['lidar_occupancy'][:]
+
         indices_to_remove = np.array([])
         
         if len(remove_agents) > 0:
@@ -345,8 +346,15 @@ class F1tenthDatasetEnv(F110Env):
         # cast to int indices_to_remove
         indices_to_remove = indices_to_remove.astype(np.int64)
         
+
+
         if self.set_terminals:
             temp_dataset["terminals"] = root['done'][:] | root['truncated'][:]
+        
+        if self.include_time_obs:
+            temp_dataset["observations"]["timestep"] = self.add_timesteps(temp_dataset)
+            print("timesteps", temp_dataset["observations"]["timestep"][:252])
+
         dataset_removed = self._remove_indices_from_dataset(temp_dataset, indices_to_remove)
 
         print("dataset original size: ", og_dataset_size)
@@ -413,3 +421,37 @@ class F1tenthDatasetEnv(F110Env):
         
         # set 
         return indices_to_remove, truncates
+    def add_timesteps(self, dataset):
+        """
+        Calculates timesteps as normalized values (ranging from 0 to 1) for each trajectory in the dataset.
+
+        Args:
+            dataset (dict): The dataset containing 'terminals' and 'timeouts' keys.
+
+        Returns:
+            np.ndarray: An array of timesteps for each trajectory, normalized between 0 and 1.
+        """
+        # Check for necessary keys
+        if 'terminals' not in dataset or 'timeouts' not in dataset:
+            print("Error: 'terminals' and 'timeouts' keys are required.")
+            return None
+
+        # Calculate end indices of trajectories
+        terminals = np.logical_or(dataset['terminals'], dataset['timeouts'])
+        end_indices = np.where(terminals)[0] + 1
+
+        # Calculate normalized timesteps for each trajectory
+        all_timesteps = []
+        start_idx = 0
+        for end_idx in end_indices:
+            # Number of timesteps in the trajectory
+            num_timesteps = end_idx - start_idx
+            # Normalized timesteps between 0 and 1
+            timesteps = np.linspace(0, 1, num_timesteps, endpoint=False)
+            all_timesteps.append(timesteps)
+            start_idx = end_idx
+
+        # Concatenate all timesteps
+        all_timesteps = np.concatenate(all_timesteps)
+
+        return all_timesteps
