@@ -74,7 +74,7 @@ The vels are currently 0. Progress is defined over the middle line of the track 
 
 # Important other data Fields
 - infos: for the real data contains the timestamps when the data was recorded
-- model_names: Yields the model that was used to compute action
+- model_names: Yields the model that was used to compute the actions, if you are interested in running the models, please reach out to me.
 - action: the first position gives the target steering angle, the second the target velocity (this is not necessarily the achieved speed and velocity).
 - log_probs: The log probability of taking this action
 - scans: The lidar scans
