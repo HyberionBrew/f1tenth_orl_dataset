@@ -141,8 +141,12 @@ class F1tenthDatasetEnv(F110Env):
         self.data_dir = data_dir
 
         # check if dataset exists
-        if not(self.data_dir.exists()) or redownload:
+        if not(Path(f"{self.data_dir}.zip").exists()) or redownload:
+            print(f"Attempting download - sometimes this does not work for me - you can always download the dataset from {self.dataset_url}")
+            print(f"Place it in {self.data_dir} and rename it to {self.data_dir}.zip")
             self._download_file(self.dataset_url, f"{self.data_dir}.zip")#self.data_dir)
+            
+        if not(self.data_dir.exists()):
             self._unzip_file(f"{self.data_dir}.zip")        
        
         rays = int(1080/SUBSAMPLE)
