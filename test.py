@@ -1,33 +1,27 @@
 import f110_gym
 import f110_orl_dataset
 import gymnasium as gym
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Assuming f110_orl_dataset has already updated F110Env with get_dataset
-env = gym.make('f110_with_dataset-v0',
-    # only terminals are available as of tight now 
-        **dict(name='f110_with_dataset-v0',
-            config = dict(map="Infsaal", num_agents=1,
-            params=dict(vmin=0.5, vmax=2.0)),
+F110Env = gym.make('f110-real-v0',
+                   encode_cyclic=True,
+                   flatten_obs=True,
+                   timesteps_to_include=(0,250),
+                   reward_config="reward_raceline.json",
+        **dict(name='f110-real-v0',
+            config = dict(map="Infsaal2", num_agents=1),
               render_mode="human")
-    )#x = f110_orl_dataset.F1tenthDatasetEnv("dw", dict())
-#x.get_dataset()
-# This should now be possible
-tr = env.get_dataset(zarr_path="/home/fabian/f110_rl/f110-sb3/trajectories4.zarr")#print(tr["observations"][0:10])
-print(tr["observations"][0:2])
-print("---------")
-print(env.normalize_obs_batch(tr["observations"][0:2]))
-#env.get_action_space()
-#print(env.action_space)
-#print(env.observation_space)
-"""
-print(env.observation_space.shape)
-print(env.action_space.shape)
-print(".........")
-print(env.observation_spec().shape[0])
-print(env.action_spec().shape[0])
-print(tr["scans"].shape)
-print(tr["observations"].shape)
-print(tr["actions"].shape)
-print(tr["actions"][10:20])
-print(tr["observations"][10:20])
-"""
+    ) 
+
+#print(F110Env.observation_space_orig)
+ds = F110Env.get_dataset(#zarr_path="/home/fabian/msc/f110_dope/ws_release/dataset_real_2312.zarr",
+    only_agents=["StochasticContinousFTGAgent_0.15_5_0.2_0.15_2.0"],)
+
+
+print(ds["infos"]["obs_keys"])
+print(ds["observations"])
+print(ds["actions"][:5])
+#print(ds["rewards"][:250])
+#print(np.count_nonzero(ds["rewards"]))
+#print(ds["infos"]["lidar_timestamp"][:5])
