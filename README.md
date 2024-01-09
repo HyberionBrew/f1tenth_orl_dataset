@@ -2,12 +2,15 @@
 Tested with conda and python=3.8.
 
 First, you will need an adapted version of the f1tenth-gym.
-`git clone https://github.com/HyberionBrew/f1tenth_gym.git`
 
-checkout the v1.0.0 branch
+checkout the v1.0.0 branch:
 
-```cd f1tenth_gym
-git checkout v1.0.0```
+```
+git clone https://github.com/HyberionBrew/f1tenth_gym.git
+cd f1tenth_gym
+git checkout v1.0.0
+
+```
 
 install it:
 
