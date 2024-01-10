@@ -368,6 +368,8 @@ class F1tenthDatasetEnv(F110Env):
         
         if self.include_time_obs:
             temp_dataset["observations"]["timestep"] = self.add_timesteps(temp_dataset)
+            # below is for legacy reasons
+            temp_dataset["timesteps"] = temp_dataset["observations"]["timestep"][:].copy()
             # print("timesteps", temp_dataset["observations"]["timestep"][:252])
 
         dataset_removed = self._remove_indices_from_dataset(temp_dataset, indices_to_remove)
@@ -470,3 +472,92 @@ class F1tenthDatasetEnv(F110Env):
         all_timesteps = np.concatenate(all_timesteps)
 
         return all_timesteps
+    
+    def get_laser_scan(self, states, subsample_laser):
+        # correctly extract x,y from the obs_dictionary
+        xy = states[:, :2]
+
+        if self.encode_cyclic:
+            theta_sin = states[:, 2]
+            theta_cos = states[:, 3]
+            #print(states)
+            #print(theta_sin)
+            #print(theta_cos)
+            theta = np.arctan2(theta_sin, theta_cos)
+        else:
+            theta = states[:, 2]
+        
+        
+        #print("states laser")
+        #print(states)
+
+        #print("theta", theta)
+        # Expand the dimensions of theta
+        theta = np.expand_dims(theta, axis=-1)
+        joined = np.concatenate([xy, theta], axis=-1)
+        
+        all_scans = []
+        for pose in joined:
+            # print("sampling at pose:", pose)
+            # Assuming F110Env.sim.agents[0].scan_simulator.scan(pose, None) returns numpy array
+            scan = self.sim.agents[0].scan_simulator.scan(pose, None)[::subsample_laser]
+            scan = scan.astype(np.float32)
+            all_scans.append(scan)
+        # normalize the laser scan
+        all_scans = np.array(all_scans)
+        return all_scans
+    
+    def normalize_laser_scan(self, batch_laserscan):
+        batch_laserscan = np.asarray(batch_laserscan)
+        assert len(batch_laserscan.shape) == 2, "Batch should be 2D"
+        batch_laserscan = np.clip(batch_laserscan, 0, 10)
+        batch_laserscan = batch_laserscan / 10
+        return batch_laserscan
+    
+
+    def unflatten_batch(self, batch):
+        batch = np.asarray(batch)
+
+        assert len(batch.shape) == 2, "Batch should be 2D"
+
+        batch_dict = {}
+        
+        start_idx = 0
+        for key, space in self.state_space.spaces.items():
+            # Calculate how many columns this part of the observation takes up
+            space_shape = np.prod(space.shape)
+            
+            # Slice the appropriate columns from the batch
+            batch_slice = batch[:,start_idx:start_idx+space_shape]
+            #print(key)
+            #print(batch_slice.shape)
+            # If the space has multi-dimensions, reshape it accordingly
+            if len(space.shape) > 1:
+                batch_slice = batch_slice # .reshape(space.shape)
+                # print(batch_slice.shape)
+            # squeeze all 1 dimensions exepct dim 0
+            else:
+                batch_slice = np.squeeze(batch_slice, axis=1)
+            batch_dict[key] = batch_slice
+            start_idx += space_shape
+
+        assert start_idx == batch.shape[1], "Mismatch in the number of columns"
+        return batch_dict
+    
+    def flatten_batch(self, batch_dict):
+        batch = np.zeros((len(batch_dict["poses_x"]), 11))
+        # print(batch.shape)
+        i = 0
+        for key, obs in self.state_space.spaces.items():
+            # Calculate how many columns this part of the observation takes up
+            
+            space_shape = np.prod(obs.shape)
+            # Slice the appropriate columns from the batch
+            batch_slice = batch_dict[key]
+            # If the space has multi-dimensions, reshape it accordingly
+            if len(obs.shape) > 1:
+                batch_slice = batch_slice.reshape((-1, space_shape))
+            batch[:, i:i+space_shape] = batch_slice
+            i = i + space_shape
+        return batch
+    
