@@ -30,6 +30,8 @@ obs_dictionary_keys_circular = [
     "linear_vels_x",
     "linear_vels_y",
     # "previous_action",
+    "previous_action_steer",
+    "previous_action_speed",
     "progress_sin",
     "progress_cos",
 ]
@@ -41,6 +43,8 @@ obs_dictionary_keys_og = [
     "ang_vels_z",
     "linear_vels_x",
     "linear_vels_y",
+    "previous_action_steer",
+    "previous_action_speed",
     "progress",
 ]
 
@@ -79,6 +83,7 @@ class F1tenthDatasetEnv(F110Env):
         redownload = False, # debugging, if ds changes
         encode_cyclic = True,
         timesteps_to_include = None,
+        delta_factor = 0.3,
         **f1tenth_kwargs
         ):
         """
@@ -124,7 +129,8 @@ class F1tenthDatasetEnv(F110Env):
         self.timesteps_to_include = timesteps_to_include
         self.reward_config = reward_config
         self.include_time_obs = include_time_obs
-
+        self.use_delta_actions = use_delta_actions
+        self.delta_factor = delta_factor
         self._local_dataset_path = None
         if agent_config_dir is None:
             agent_config_dir = Path(__file__).parent / "agent_configs"
@@ -163,11 +169,12 @@ class F1tenthDatasetEnv(F110Env):
             else:
                 # assumes that additional obs are in [0,1]
                 state_dict[obs] = Box(0, 1, (1,), np.float32)
+                # this is not actually true for prev_action!       
 
         if include_time_obs:
             state_dict["timestep"] = Box(0, 1, (1,), np.float32)
             self.keys.append("timestep")
-
+        
         self.state_space = gym.spaces.Dict(state_dict)
         # print(self.action_space)
         self.observation_space = self.state_space 
@@ -266,7 +273,11 @@ class F1tenthDatasetEnv(F110Env):
         print(f"The following agents are contained in the dataset: {[i for i in np.unique(root['model_name'][:])]}")
         # load all from the zarr file
         temp_dataset = dict()
-        temp_dataset["actions"] = root['raw_actions'][:]
+        if self.use_delta_actions:
+            temp_dataset["actions"] = root['actions'][:] * self.delta_factor
+        else:
+            temp_dataset["actions"] = root['raw_actions'][:]
+
         og_dataset_size = len(temp_dataset["actions"])
         # now we need to extract the observations, some additional processing is required
         raw_observations = {}
@@ -281,6 +292,10 @@ class F1tenthDatasetEnv(F110Env):
         temp_dataset["observations"]["ang_vels_z"] = raw_observations["ang_vels_z"][:]
         temp_dataset["observations"]["linear_vels_x"] = raw_observations["linear_vels_x"][:]
         temp_dataset["observations"]["linear_vels_y"] = raw_observations["linear_vels_y"][:]
+        temp_dataset["observations"]["previous_action_steer"] = raw_observations["previous_action"][:,0]
+        temp_dataset["observations"]["previous_action_speed"] = raw_observations["previous_action"][:,1]
+        print("previous_action", temp_dataset["observations"]["previous_action_steer"][:5])
+
         #obs['progress_sin'] = np.array(np.sin(new_progress*2 * np.pi),dtype=np.float32)
         # obs['progress_cos'] = np.array(np.cos(new_progress*2 * np.pi),dtype=np.float32)
         #progress = 
