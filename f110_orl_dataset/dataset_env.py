@@ -438,6 +438,7 @@ class F1tenthDatasetEnv(F110Env):
         
         # set 
         return indices_to_remove, truncates
+    
     def add_timesteps(self, dataset):
         """
         Calculates timesteps as normalized values (ranging from 0 to 1) for each trajectory in the dataset.
@@ -561,3 +562,82 @@ class F1tenthDatasetEnv(F110Env):
             i = i + space_shape
         return batch
     
+    def simulate(self, agent, render=True, debug=True, starting_state=None, save_data=False, rollouts=1, episode_length=500):
+        """
+        Simulates the environment using the specified agent.
+
+        Args:
+            agent (Agent): The agent to use for simulation.
+            render (bool, optional): Whether to render the simulation.
+            debug (bool, optional): Whether to print debug information.
+            starting_state (np.ndarray, optional): The starting state of the simulation.
+                If None, the simulation starts from the random states along the raceline.
+        Returns:
+            Tuple (np.ndarray, np.ndarray, np.ndarray, np.ndarray): The states, actions, 
+                rewards, and terminals from the simulation.
+        """
+        import f110_orl_dataset.simulation_helpers as sh
+        from f110_agents.rewards import Progress 
+        if starting_state is None:
+            starting_states = sh.get_start_position(self.track, start_positions=rollouts)
+        progress = Progress(self.track, lookahead=200)
+        for starting_state in starting_states:
+            reset_options = dict(poses=np.array([starting_state]))
+            self.reset(options=reset_options)
+            agent.reset()
+            
+            current_steer = 0.0
+            current_vel = 0.0
+            obs, reward, done, truncated, info = self.step(np.array([[current_steer,current_vel]]))
+            progress.reset(np.array([[obs["poses_x"][0], obs["poses_y"][0]]]))
+            for timestep in range(episode_length):
+                obs["previous_action_steer"] = np.array([current_steer])
+                obs["previous_action_speed"] = np.array([current_vel])
+
+                del obs["ego_idx"]
+                del obs["lap_counts"]
+                del obs["lap_times"]
+                
+                # we need to add the timestep to the obs, transform the laser scan and 
+                # add lidar_occupancy
+                new_progress = progress.get_progress(np.array([[obs["poses_x"][0], obs["poses_y"][0]]]))
+                obs["progress"] = np.array(new_progress)
+                scan = obs["scans"]
+                scan = self.normalize_laser_scan(scan)
+                obs["lidar_occupancy"] = scan[:,::SUBSAMPLE]
+                del obs["scans"]
+
+                if self.encode_cyclic:
+                    obs['progress_sin'] = np.array(np.sin(new_progress*2 * np.pi),dtype=np.float32)
+                    obs['progress_cos'] = np.array(np.cos(new_progress*2 * np.pi),dtype=np.float32)
+                    obs['theta_sin'] = np.array(np.sin(obs["poses_theta"][0]),dtype=np.float32)
+                    obs['theta_cos'] = np.array(np.cos(obs["poses_theta"][0]),dtype=np.float32)
+                    del obs["poses_theta"]
+                    del obs["progress"]
+                if self.include_time_obs:
+                    obs["timestep"] = np.array([timestep/episode_length])
+                # add progress
+                print(obs)
+                # run agent
+                _, action, log_prob = agent(obs) #timestep=np.array([timestep/episode_length]))
+                action = action[0]
+                if self.use_delta_actions:
+                    #print("delta actions")
+                    #print(action, current_steer, current_vel)
+                    current_steer += action[0] 
+                    current_vel += action[1]
+                else:
+                    current_steer = action[0]
+                    current_vel = action[1]
+                print("current steer", current_steer)
+                print("current vel", current_vel)
+                print("obs, linear vel", obs["linear_vels_x"])
+                # do 5 steps
+                for _ in range(5):
+                    obs, reward, done, truncated, info = self.step(np.array([[current_steer,current_vel]]))
+                    if done or truncated:
+                        break
+                if render:
+                    self.render()
+                if done or truncated:
+                    break
