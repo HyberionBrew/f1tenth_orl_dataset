@@ -2,7 +2,7 @@
 
 ![trajectories](https://github.com/HyberionBrew/f1tenth_orl_dataset/assets/31421881/e17adbd2-9dc8-4bdb-9dac-955e09adf7e8)
 
-The f110-real-v1 dataset contains a bit over 300 trajectories, collected with 30 different agents. In the above picture crashes (terminals) are marked with black dots, normal truncations are black x's and the colored x's are the starting points along the track.
+The f110-real-v1 dataset contains a bit over 300 trajectories, collected with 30 different agents. Each trajectory contains 251 timesteps. In the above picture crashes (terminals) are marked with black dots, normal truncations are black x's and the colored x's are the starting points along the track.
 
 # How to install
 Tested with conda and python=3.8.
