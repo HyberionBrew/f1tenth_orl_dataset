@@ -84,7 +84,7 @@ class F1tenthDatasetEnv(F110Env):
         redownload = False, # debugging, if ds changes
         encode_cyclic = True,
         timesteps_to_include = None,
-        delta_factor = 0.3,
+        delta_factor = 1.0,
         skip_download = False,
         **f1tenth_kwargs
         ):
