@@ -30,6 +30,7 @@ if __name__ == "__main__":
             zarr_path= args.path,
             #clip_trajectory_length=(0,timestep),
             )
+    print(F110Env.get_observation_keys())
     
     root = zarr.open(zarr_path, mode='wr')
     # check if group exists
@@ -47,5 +48,18 @@ if __name__ == "__main__":
         new_rewards = np.squeeze(new_rewards, axis=0)
 
         root["new_rewards"][args.reward_config] = new_rewards
+    # where there is a terminal set reward to 0
+    #print("Number of 0s", np.count_nonzero(new_rewards == 0))
+    new_rewards[root["done"]] = 0.0
     print(root["new_rewards"][args.reward_config][:150])
+    # count 0s in new rewards
+    print(len(root["new_rewards"][args.reward_config]))
+    
+    #print("Number of 0s", np.count_nonzero(new_rewards == 0))
+    import matplotlib.pyplot as plt
+    for i in range(10):
+        plt.plot(np.array(new_rewards[0:2500 ]))
+        #plt.plot(np.array(root["truncated"][500 * i:500 * (i+1)]))
+        #plt.plot(np.array(root["done"][500 * i:500 * (i+1)]))
+        plt.show()
     print("Finished relabeling, now available as --alternate_rewards=True")

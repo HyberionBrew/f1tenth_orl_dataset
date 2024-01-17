@@ -15,7 +15,10 @@ class ProgressReward:
         #    return np.zeros((obs.shape[0], obs.shape[1]))
         assert len(obs.shape) == 3
         assert obs.shape[1] > 1
-        progress = obs [..., -1]
+        progress = obs [..., -2]
+        print(obs[..., -2])
+        print("------")
+        print(obs[...,1])
         # assert progress.shape[-1] == 2
         # sin and cos progress to progress
         #progress = np.arctan2(progress[...,0], progress[...,1])
@@ -161,10 +164,10 @@ class MixedReward:
     @param action: action with the shape (batch_size, trajectory_length, action_dim)
     """
     def __call__(self, obs, action, collision, done, laser_scan=None):
-        assert obs.shape[:-1] == action.shape[:-1]
+        assert obs.shape[:-1] == action.shape[:-1], f" Obs shape is {obs.shape} and action shape is {action.shape}"
         assert len(obs.shape) == 3
         print(obs.shape)
-        assert obs.shape[-1] == 7
+        # assert obs.shape[-1] == 7
         # need to handle laser scans somehow in the future
 
         # empty rewards array to collect the rewards
@@ -239,13 +242,15 @@ def calculate_reward(config, dataset, env, track):
     mixedReward = MixedReward(env, config)
 
     timesteps = dataset["observations"].shape[0]
-    finished_trajectory = np.logical_or(dataset["terminals"],
-                                        dataset["timeouts"])
+    finished_trajectory = dataset["timeouts"] #np.logical_or(dataset["terminals"],
+                          #              dataset["timeouts"])
     
     # find where the trajectory is finished
     finished = np.where(finished_trajectory)[0]
 
     timesteps = None # for debugging
+
+    #print(dataset["rewards"].shape)
     batch_obs = np.split(dataset["observations"][:timesteps], finished+1)
     batch_act = np.split(dataset["actions"][:timesteps], finished+1)
     batch_col = np.split(dataset["terminals"][:timesteps], finished+1)
@@ -254,20 +259,27 @@ def calculate_reward(config, dataset, env, track):
     #print(batch_laserscan.shape)
     #print(batch_obs.shape)
     all_rewards = np.zeros((1,0))
+    print(len(batch_obs))
+    print(len(batch_laserscan))
+    print(len(batch_act))
+    print(len(batch_col))
+    print(len(batch_ter))
+
     
     for batch in zip(batch_obs, batch_act, batch_col, batch_ter, batch_laserscan):
+        print("hi")
         batch = list(batch)
         for i in range(len(batch)):
             batch[i] = np.expand_dims(batch[i], axis=0)
 
         if batch[0].shape[1] <= 1:
             break
-        #print(batch[0].shape)
-        #print(batch[4].shape)
+        print(batch[0].shape)
+        print(batch[4].shape)
         reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
         #print(reward.shape)
         all_rewards = np.concatenate([all_rewards, reward], axis=1)
-    print(all_rewards[:50])
+    #print(all_rewards[:50])
     return all_rewards
 
 def test_progress_reward():

@@ -67,6 +67,7 @@ class F1tenthDatasetEnv(F110Env):
         self,
         name,
         dataset_url,
+        bad_trajectories = [],
         reward_config = None,
         ref_max_score=None,
         ref_min_score=None,
@@ -84,6 +85,7 @@ class F1tenthDatasetEnv(F110Env):
         encode_cyclic = True,
         timesteps_to_include = None,
         delta_factor = 0.3,
+        skip_download = False,
         **f1tenth_kwargs
         ):
         """
@@ -132,6 +134,7 @@ class F1tenthDatasetEnv(F110Env):
         self.use_delta_actions = use_delta_actions
         self.delta_factor = delta_factor
         self._local_dataset_path = None
+        self.bad_trajectories = bad_trajectories
         if agent_config_dir is None:
             agent_config_dir = Path(__file__).parent / "agent_configs"
         
@@ -146,7 +149,7 @@ class F1tenthDatasetEnv(F110Env):
         self.data_dir = data_dir
 
         # check if dataset exists
-        if not(Path(f"{self.data_dir}.zip").exists()) or redownload:
+        if (not(Path(f"{self.data_dir}.zip").exists()) or redownload) and not(skip_download):
             print(f"Attempting download - sometimes this does not work for me - you can always download the dataset from {self.dataset_url}")
             print(f"Place it in {self.data_dir} and rename it to {self.data_dir}.zip")
             self._download_file(self.dataset_url, f"{self.data_dir}.zip")#self.data_dir)
@@ -292,9 +295,13 @@ class F1tenthDatasetEnv(F110Env):
         temp_dataset["observations"]["ang_vels_z"] = raw_observations["ang_vels_z"][:]
         temp_dataset["observations"]["linear_vels_x"] = raw_observations["linear_vels_x"][:]
         temp_dataset["observations"]["linear_vels_y"] = raw_observations["linear_vels_y"][:]
-        temp_dataset["observations"]["previous_action_steer"] = raw_observations["previous_action"][:,0]
-        temp_dataset["observations"]["previous_action_speed"] = raw_observations["previous_action"][:,1]
-        print("previous_action", temp_dataset["observations"]["previous_action_steer"][:5])
+        if "previous_action" in raw_observations:
+            temp_dataset["observations"]["previous_action_steer"] = raw_observations["previous_action"][:,0]
+            temp_dataset["observations"]["previous_action_speed"] = raw_observations["previous_action"][:,1]
+        else:
+            temp_dataset["observations"]["previous_action_steer"] = raw_observations["previous_action_steer"][:]
+            temp_dataset["observations"]["previous_action_speed"] = raw_observations["previous_action_speed"][:]
+        # print("previous_action", temp_dataset["observations"]["previous_action_steer"][:5])
 
         #obs['progress_sin'] = np.array(np.sin(new_progress*2 * np.pi),dtype=np.float32)
         # obs['progress_cos'] = np.array(np.cos(new_progress*2 * np.pi),dtype=np.float32)
@@ -311,9 +318,14 @@ class F1tenthDatasetEnv(F110Env):
             theta = np.arctan2(theta_sin, theta_cos)
             temp_dataset["observations"]["poses_theta"] = theta
         
-
         temp_dataset["terminals"] = root['done'][:]
-        temp_dataset["timeouts"] = root['truncated'][:]
+        temp_dataset["timeouts"] = root['truncated'][:] | root['done'][:]
+        # print the distance between all timeouts
+        #debug = np.where(temp_dataset["timeouts"] == True)[0]
+        #print("timeouts", debug)
+        #print("timeouts", debug[1:] - debug[:-1])
+        #print("debug", np.count_nonzero(debug[1:] - debug[:-1]))
+        #print(np.where(debug[1:] - debug[:-1]==311))
 
         if self.reward_config is not None:
             # check if the key is available
@@ -335,17 +347,57 @@ class F1tenthDatasetEnv(F110Env):
         temp_dataset["scans"] = root["observations"]['lidar_occupancy'][:]
 
         indices_to_remove = np.array([])
+        # print("hi")
+
+        if len(self.bad_trajectories) > 0:
+
+            _indices_to_remove = np.array([], dtype=np.int64)
+            for trajectory_start in self.bad_trajectories:
+                end = temp_dataset["timeouts"][trajectory_start:]
+                end_index = np.where(end)[0]
+
+                # Check if end_index is not empty and calculate the actual end point
+                if len(end_index) > 0:
+                    end_index = end_index[0] + trajectory_start
+                else:
+                    # If end_index is empty, it means the trajectory goes till the end of the dataset
+                    end_index = len(temp_dataset["timeouts"]) - 1
+
+                # Use numpy.append to append the new range to the existing array
+                # print(len(np.arange(trajectory_start, end_index + 1, dtype=np.int64)))
+                indices_to_remove = np.append(indices_to_remove, np.arange(trajectory_start, end_index + 1, dtype=np.int64))
+                # change type to int
+                indices_to_remove = indices_to_remove.astype(np.int64)
+        # remove all consecutive terminals except the first one
+        cons_terminal_indices = self._find_consecutive_terminals_indices(temp_dataset["terminals"])
         
+
+        indices_to_remove = np.union1d(indices_to_remove,
+                                       cons_terminal_indices)
+
+        #print(indices_to_remove)
+        # plot the timeouts of the indices_to_remove
+        #import matplotlib.pyplot as plt
+        #print(indices_to_remove)
+        #plt.plot(temp_dataset["timeouts"][indices_to_remove])
+        #plt.show() 
+
+
         if len(remove_agents) > 0:
             # remove agents
             # Find all indices where the model_name matches any name in remove_agents
-            indices_to_remove = np.isin(root['model_name'][:], remove_agents)
+            _indices_to_remove = np.isin(root['model_name'][:], remove_agents)
             # Get the indices where the condition is true
-            indices_to_remove = np.where(indices_to_remove)[0]
-        
+            _indices_to_remove = np.where(_indices_to_remove)[0]
+            indices_to_remove = np.union1d(indices_to_remove, _indices_to_remove)
+
         if len(only_agents) > 0:
             indices_to_keep = np.isin(root['model_name'][:], only_agents)
+        
             indices_to_keep = np.where(indices_to_keep)[0]
+
+            #print(indices_to_keep)
+            #print(np.unique(root['model_name'][indices_to_keep]))
             # Get all indices that are not in indices_to_keep
             all_indices = np.arange(root['model_name'].shape[0])
             indices_to_remove_only_agents = np.setdiff1d(all_indices, indices_to_keep)
@@ -360,8 +412,6 @@ class F1tenthDatasetEnv(F110Env):
             indices_to_remove = np.union1d(indices_to_remove, clipped_indices)
         # cast to int indices_to_remove
         indices_to_remove = indices_to_remove.astype(np.int64)
-        
-
 
         if self.set_terminals:
             temp_dataset["terminals"] = root['done'][:] | root['truncated'][:]
@@ -373,7 +423,9 @@ class F1tenthDatasetEnv(F110Env):
             # print("timesteps", temp_dataset["observations"]["timestep"][:252])
 
         dataset_removed = self._remove_indices_from_dataset(temp_dataset, indices_to_remove)
-
+        #
+        debug = np.where(dataset_removed["timeouts"] == True)[0]
+        # print("timeouts, dataset_removed", debug[1:] - debug[:-1])
         print("dataset original size: ", og_dataset_size)
         print("dataset after removing indices size: ", len(dataset_removed["observations"]["poses_x"]))
         print("remaining agents:", np.unique(dataset_removed["model_name"]))
@@ -385,6 +437,48 @@ class F1tenthDatasetEnv(F110Env):
 
         return dataset_removed
     
+    def _find_consecutive_terminals_indices(self, terminals):
+        """
+        Find indices of consecutive ones in a numpy array.
+
+        Args:
+        terminals (np.array): A numpy array of terminals (0s and 1s).
+
+        Returns:
+        np.array: Indices of consecutive ones, except for the first one in each sequence.
+        """
+        # Ensure terminals is a numpy array
+        terminals = np.asarray(terminals)
+
+        # Find where the changes occur
+        change_points = np.where(np.diff(terminals) != 0)[0] + 1
+        """
+        print(np.sum(terminals))
+        
+        print("change_ps",change_points)
+        print(terminals[211:250])
+        import matplotlib.pyplot as plt
+        print(len(change_points))
+        print(terminals[213])
+        print(terminals[250])
+        print(terminals[251])
+        print(terminals[252])
+        plt.plot(terminals[211:250])
+        plt.show()
+        """
+        # Add the start and end of the array for completeness
+        change_points = np.concatenate([[0], change_points, [len(terminals) - 1]])
+
+        # Initialize an empty list to store indices
+        consecutive_ones_indices = []
+
+        # Iterate through the change points
+        for start, end in zip(change_points, change_points[1:]):
+            if terminals[start] == 1:  # Check if the sequence starts with a 1
+                # Add all indices after the first 1 in the sequence
+                consecutive_ones_indices.extend(range(start + 1, end))
+
+        return np.array(consecutive_ones_indices)
 
     def _remove_indices_from_dataset(self, dataset, indices_to_remove):
         """
@@ -410,18 +504,19 @@ class F1tenthDatasetEnv(F110Env):
         return dataset
 
     def get_observation_keys(self):
-        return list(self.dataset["observations"].keys())
+        return self.keys
     
     def clip_trajectories(self, data_dict, min_len=0, max_len=100):
-        terminals = np.logical_or(data_dict['terminals'], data_dict['timeouts'])
+        terminals =data_dict['timeouts']
         start_indices = np.where(terminals[:-1] & ~terminals[1:])[0] + 1
         start_indices = np.concatenate(([0], start_indices))
-
+        # print("Trajectories", len(start_indices))
         indices_to_remove = []
         truncates = np.zeros_like(data_dict['terminals'])
-        for i in range(len(start_indices) - 1):
-            start, end = start_indices[i], start_indices[i + 1]
-            
+        for i in range(len(start_indices)):
+
+            start  = start_indices[i]
+            end = start_indices[i + 1] if i + 1 < len(start_indices) else len(terminals)
             # Determine the actual start and end indices after clipping
             clipped_start = max(start + min_len, start)
             clipped_end = min(start + max_len, end)
@@ -515,6 +610,14 @@ class F1tenthDatasetEnv(F110Env):
         batch_laserscan = batch_laserscan / 10
         return batch_laserscan
     
+    def get_specific_obs(self, obs, keys):
+        if self.flatten_obs:
+            # find position of keys in self.keys
+            positions = [self.keys.index(key) for key in keys]
+            # return the corresponding observations
+            return obs[:,positions]
+        else:
+            raise NotImplementedError("Not implemented for non-flattened observations, just access only correct keys")
 
     def unflatten_batch(self, batch):
         batch = np.asarray(batch)
@@ -546,12 +649,11 @@ class F1tenthDatasetEnv(F110Env):
         return batch_dict
     
     def flatten_batch(self, batch_dict):
-        batch = np.zeros((len(batch_dict["poses_x"]), 11))
+        batch = np.zeros((len(batch_dict["poses_x"]), len(self.keys)))
         # print(batch.shape)
         i = 0
         for key, obs in self.state_space.spaces.items():
             # Calculate how many columns this part of the observation takes up
-            
             space_shape = np.prod(obs.shape)
             # Slice the appropriate columns from the batch
             batch_slice = batch_dict[key]
@@ -562,7 +664,7 @@ class F1tenthDatasetEnv(F110Env):
             i = i + space_shape
         return batch
     
-    def simulate(self, agent, render=True, debug=True, starting_state=None, save_data=False, rollouts=1, episode_length=500):
+    def simulate(self, agent, agent_name = None, render=True, debug=True, starting_states=None, save_data=False, num_episodes=1, episode_length=500):
         """
         Simulates the environment using the specified agent.
 
@@ -578,10 +680,15 @@ class F1tenthDatasetEnv(F110Env):
         """
         import f110_orl_dataset.simulation_helpers as sh
         from f110_agents.rewards import Progress 
-        if starting_state is None:
-            starting_states = sh.get_start_position(self.track, start_positions=rollouts)
+        if starting_states is None:
+            starting_states = sh.get_start_position(self.track, start_positions=num_episodes)
         progress = Progress(self.track, lookahead=200)
-        for starting_state in starting_states:
+        if agent_name is None:
+            agent_name = str(agent)
+        log_dump = []
+        obs_numpy = np.zeros((num_episodes, episode_length, len(self.keys)))
+
+        for episode, starting_state in enumerate(starting_states):
             reset_options = dict(poses=np.array([starting_state]))
             self.reset(options=reset_options)
             agent.reset()
@@ -590,6 +697,8 @@ class F1tenthDatasetEnv(F110Env):
             current_vel = 0.0
             obs, reward, done, truncated, info = self.step(np.array([[current_steer,current_vel]]))
             progress.reset(np.array([[obs["poses_x"][0], obs["poses_y"][0]]]))
+            
+            
             for timestep in range(episode_length):
                 obs["previous_action_steer"] = np.array([current_steer])
                 obs["previous_action_speed"] = np.array([current_vel])
@@ -610,17 +719,19 @@ class F1tenthDatasetEnv(F110Env):
                 if self.encode_cyclic:
                     obs['progress_sin'] = np.array(np.sin(new_progress*2 * np.pi),dtype=np.float32)
                     obs['progress_cos'] = np.array(np.cos(new_progress*2 * np.pi),dtype=np.float32)
-                    obs['theta_sin'] = np.array(np.sin(obs["poses_theta"][0]),dtype=np.float32)
-                    obs['theta_cos'] = np.array(np.cos(obs["poses_theta"][0]),dtype=np.float32)
+                    obs['theta_sin'] = np.array(np.sin(obs["poses_theta"]),dtype=np.float32)
+                    obs['theta_cos'] = np.array(np.cos(obs["poses_theta"]),dtype=np.float32)
                     del obs["poses_theta"]
                     del obs["progress"]
                 if self.include_time_obs:
                     obs["timestep"] = np.array([timestep/episode_length])
                 # add progress
-                print(obs)
+                #print(obs)
                 # run agent
                 _, action, log_prob = agent(obs) #timestep=np.array([timestep/episode_length]))
+                action_out = action.copy()
                 action = action[0]
+                
                 if self.use_delta_actions:
                     #print("delta actions")
                     #print(action, current_steer, current_vel)
@@ -629,15 +740,46 @@ class F1tenthDatasetEnv(F110Env):
                 else:
                     current_steer = action[0]
                     current_vel = action[1]
-                print("current steer", current_steer)
-                print("current vel", current_vel)
-                print("obs, linear vel", obs["linear_vels_x"])
+                #print("current steer", current_steer)
+                #print("current vel", current_vel)
+                #print("obs, linear vel", obs["linear_vels_x"])
                 # do 5 steps
+                del obs["collisions"]
+                # create obs without lidar
+                obs_no_lidar = obs.copy()
+                del obs_no_lidar["lidar_occupancy"]
+                obs_flattened = self.flatten_batch(obs_no_lidar)
+                obs_numpy[episode, timestep, :] = obs_flattened
+                
+
+                action_raw = np.array([[current_steer, current_vel]])
+                time_infos = {}
+                time_infos["lidar_timestamp"] = 0.0
+                time_infos["pose_timestamp"] = 0.0
+                time_infos["action_timestamp"] = 0.0
+                imu_data = dict()
+                imu_data["lin_vel_x"] = [obs["linear_vels_x"][0]]
+                imu_data["lin_vel_y"] = [0.0]
+                imu_data["lin_vel_z"] = [0.0]
+                imu_data["ang_vel_x"] = [0.0]
+                imu_data["ang_vel_y"] = [0.0]
+                imu_data["ang_vel_z"] = [0.0]
+                imu_data["timestamp"] = [0.0]
+                if timestep == episode_length - 1:
+                    truncated = True
+                if done:
+                    truncated = True # also set truncated to true, because I sometimes handle only with truncation for end of trajectories!
+                log_dump.append((action_out, obs, 0.0, done, truncated, 0.0, 
+                                timestep, agent_name, done, action_raw, 
+                                time_infos, imu_data))
+                if done or truncated:
+                    break
                 for _ in range(5):
                     obs, reward, done, truncated, info = self.step(np.array([[current_steer,current_vel]]))
                     if done or truncated:
                         break
                 if render:
                     self.render()
-                if done or truncated:
-                    break
+
+        
+        return log_dump, obs_numpy # also return a nice observation numpy array             

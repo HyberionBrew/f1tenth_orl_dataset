@@ -90,6 +90,7 @@ class Progress:
         return np.clip(progress, 0, 1)
     # input shape: tuple of (x,y)
     def reset(self, pose):
+        # print(pose)
         rel_pose = pose - self.centerline[:-1]
         t = np.sum(rel_pose * self.segment_vectors, axis=1) / np.sum(self.segment_vectors**2, axis=1)
         t = np.clip(t, 0, 1)
@@ -152,6 +153,8 @@ if __name__ == "__main__":
     progress.reset(pose(0))
     progr = []
     first = 0
+
+
     root["observations"]["progress"] = np.zeros_like(root['observations']["poses_x"])
     for i in tqdm(range(len(root['observations']["poses_x"]))):
         #print(progress.get_progress(pose(i)))
@@ -183,3 +186,6 @@ if __name__ == "__main__":
             #plt.show()
             #plt.scatter(root['observations']["poses_x"][i:i+249], root['observations']["poses_y"][i:i+249])
             #plt.show()
+    print(np.array(root["observations"]["progress"]))
+    plt.plot(np.array(root["observations"]["progress"]))
+    plt.show()
