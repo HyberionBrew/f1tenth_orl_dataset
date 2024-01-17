@@ -88,6 +88,6 @@ The vels are currently 0. Progress is defined over the middle line of the track 
 - log_probs: The log probability of taking this action
 - scans: The lidar scans
 - terminals: 1 if termination
-- timeouts: 1 if timeout (In real dataset after 250 timesteps, in sim after 500 per default)
+- timeouts: 1 if timeout (In real dataset after 250 timesteps, in sim after 500 per default), also 1 if termination is 1.
 
 
