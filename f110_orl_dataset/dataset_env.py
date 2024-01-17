@@ -269,8 +269,11 @@ class F1tenthDatasetEnv(F110Env):
         """
 
         assert len(remove_agents)==0 or len(only_agents)==0, "Cannot specify both only_agents and without_agents"
+        
         if zarr_path is None:
+            print("using default path")
             zarr_path = self.data_dir
+        print(f"path: {self.data_dir}")
         root = zarr.open(zarr_path, mode='r')
         
         print(f"The following agents are contained in the dataset: {[i for i in np.unique(root['model_name'][:])]}")
