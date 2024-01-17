@@ -39,11 +39,14 @@ The test file shows most of the functionality.
 # Explanation of the datatsets
 The datasets are recorded with a control frequency of 20 HZ. For the real world dataset lidar and pose data are also available with roughly this frequency.
 
-Currently, there are two datasets available:
+Currently, there are four datasets available:
 - f110-real-v0: contains data collected in the real world. This dataset contains 25 trajectories per Agent, there are a total of 7 different agents. The dataset lacks imu data, which will be added with the next update.
 Since the most recent pose and available lidar data are used, they might be old, you can see the timestamp of when the agent is invoked in the infos agent_action field. The lidar and pose timestamp field in infos inform on when the pose and lidar data where last udpated. 
 
 - f110-sim-v0: contains data that uses the same starting points as the real dataset but runs in simulation. The timestamps in infos are always 0 and irrelevant, since we have perfect scans/pose.
+
+- f110-real-v1: 10 trajectories per agent, for 30 Agents (sometimes a bit more sometimes a bit less, due to some trajectories being invalid due to recording issues) There is imu data, which was collected at 120Hz, only the last IMU update is made available in the observations. Other IMU data would need to be extracted from the zarr archive, where it is stored as imu with its respective timestamps.
+- f110-sim-v1: Same starting points as real, just in sim.
 
 
 
