@@ -419,14 +419,15 @@ class F1tenthDatasetEnv(F110Env):
         if self.set_terminals:
             temp_dataset["terminals"] = root['done'][:] | root['truncated'][:]
         
-        if self.include_time_obs:
-            temp_dataset["observations"]["timestep"] = self.add_timesteps(temp_dataset)
-            # below is for legacy reasons
-            temp_dataset["timesteps"] = temp_dataset["observations"]["timestep"][:].copy()
+
             # print("timesteps", temp_dataset["observations"]["timestep"][:252])
 
         dataset_removed = self._remove_indices_from_dataset(temp_dataset, indices_to_remove)
         #
+        if self.include_time_obs:
+            dataset_removed["observations"]["timestep"] = self.add_timesteps(dataset_removed)
+            # below is for legacy reasons
+            dataset_removed["timesteps"] = dataset_removed["observations"]["timestep"][:].copy()
         debug = np.where(dataset_removed["timeouts"] == True)[0]
         # print("timeouts, dataset_removed", debug[1:] - debug[:-1])
         print("dataset original size: ", og_dataset_size)
@@ -554,22 +555,26 @@ class F1tenthDatasetEnv(F110Env):
 
         # Calculate end indices of trajectories
         terminals = np.logical_or(dataset['terminals'], dataset['timeouts'])
+        start_indices = np.where(np.roll(terminals,1))[0]
         end_indices = np.where(terminals)[0] + 1
+        # find longest trajectory
+        longest_trajectory = end_indices - start_indices
+        longest_trajectory = np.max(longest_trajectory)
+        print(longest_trajectory)
 
         # Calculate normalized timesteps for each trajectory
         all_timesteps = []
         start_idx = 0
-        for end_idx in end_indices:
+        timesteps = np.linspace(0, 1, longest_trajectory, endpoint=False)
+        for start_idx, end_idx in zip(start_indices, end_indices):
             # Number of timesteps in the trajectory
-            num_timesteps = end_idx - start_idx
             # Normalized timesteps between 0 and 1
-            timesteps = np.linspace(0, 1, num_timesteps, endpoint=False)
-            all_timesteps.append(timesteps)
-            start_idx = end_idx
-
+            print(len(timesteps[:end_idx - start_idx]))
+            all_timesteps.append(timesteps[:end_idx - start_idx])
         # Concatenate all timesteps
         all_timesteps = np.concatenate(all_timesteps)
-
+        print(len(terminals))
+        print(len(all_timesteps))
         return all_timesteps
     
     def get_laser_scan(self, states, subsample_laser):
