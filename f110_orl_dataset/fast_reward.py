@@ -16,9 +16,6 @@ class ProgressReward:
         assert len(obs.shape) == 3
         assert obs.shape[1] > 1
         progress = obs [..., -2]
-        print(obs[..., -2])
-        print("------")
-        print(obs[...,1])
         # assert progress.shape[-1] == 2
         # sin and cos progress to progress
         #progress = np.arctan2(progress[...,0], progress[...,1])
@@ -91,6 +88,13 @@ class MinLidarReward:
         assert reward.shape == (obs.shape[0], obs.shape[1])
         return reward
 
+class LifetimeReward:
+    def __init__(self):
+        pass
+    def __call__(self, obs, action, laser_scan):
+        reward = np.ones((obs.shape[0], obs.shape[1]))
+        return reward
+
 class RacelineDeltaReward:
     def __init__(self, track:Track, max_delta=2.0):
         xs = track.raceline.xs
@@ -132,6 +136,7 @@ class RacelineDeltaReward:
             plt.show()
         return reward
 
+
 # CURRENTLY DOES NOT WORK WITH LIDAR!
 #TODO! CAREFULL WHEN ADDING LIDAR TO NOT BREAK SOME REWARDS
 class MixedReward:
@@ -155,6 +160,9 @@ class MixedReward:
             print("track length", len(self.env.track.centerline.xs))
             print("track length", len(self.env.track.raceline.xs))
             self.rewards.append(RacelineDeltaReward(self.env.track))
+        if config.has_lifetime_reward():
+            self.rewards.append(LifetimeReward())
+            
         if config.has_min_steering_reward():
             pass
             #self.rewards.append(MinSteeringReward())
@@ -166,7 +174,7 @@ class MixedReward:
     def __call__(self, obs, action, collision, done, laser_scan=None):
         assert obs.shape[:-1] == action.shape[:-1], f" Obs shape is {obs.shape} and action shape is {action.shape}"
         assert len(obs.shape) == 3
-        print(obs.shape)
+        #print(obs.shape)
         # assert obs.shape[-1] == 7
         # need to handle laser scans somehow in the future
 
@@ -259,24 +267,19 @@ def calculate_reward(config, dataset, env, track):
     #print(batch_laserscan.shape)
     #print(batch_obs.shape)
     all_rewards = np.zeros((1,0))
-    print(len(batch_obs))
-    print(len(batch_laserscan))
-    print(len(batch_act))
-    print(len(batch_col))
-    print(len(batch_ter))
+
 
     
     for batch in zip(batch_obs, batch_act, batch_col, batch_ter, batch_laserscan):
-        print("hi")
         batch = list(batch)
         for i in range(len(batch)):
             batch[i] = np.expand_dims(batch[i], axis=0)
-
-        if batch[0].shape[1] <= 1:
-            break
-        print(batch[0].shape)
-        print(batch[4].shape)
-        reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
+        if batch[0].shape[1] == 1: # trajectory length is 1, just terminals after each other
+            reward = np.zeros((1,1))
+        elif batch[0].shape[1] == 0:
+            continue
+        else:
+            reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
         #print(reward.shape)
         all_rewards = np.concatenate([all_rewards, reward], axis=1)
     #print(all_rewards[:50])
