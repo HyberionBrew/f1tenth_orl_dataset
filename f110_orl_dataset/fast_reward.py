@@ -3,6 +3,7 @@ import numpy as np
 from f110_gym.envs.track import Track
 import gymnasium as gym
 from f110_orl_dataset.normalize_dataset import Normalize
+import warnings
 
 class ProgressReward:
     def __init__(self, multiplier=100.0):
@@ -13,9 +14,15 @@ class ProgressReward:
     def __call__(self, obs, action, laser_scan):
         #if obs.shape[1] <= 1:
         #    return np.zeros((obs.shape[0], obs.shape[1]))
-        assert len(obs.shape) == 3
-        assert obs.shape[1] > 1
-        progress = obs [..., -2]
+        #assert len(obs.shape) == 3
+        #assert obs.shape[1] > 1
+        if isinstance(obs, dict):
+            progress = obs["progress"].flatten()
+            # add a zero dimension
+            progress = np.expand_dims(progress, axis=0)
+            #print(progress)
+        else: 
+            progress = obs [..., -2]
         # assert progress.shape[-1] == 2
         # sin and cos progress to progress
         #progress = np.arctan2(progress[...,0], progress[...,1])
@@ -38,8 +45,8 @@ class ProgressReward:
         # max between 0 and delta_progress
         delta_progress = np.maximum(0, delta_progress)
         reward = delta_progress
-        # prepend a zero to the reward
-        reward = np.concatenate([np.zeros_like(reward[...,0:1]), reward], axis=-1)
+        # append a zero to the reward
+        reward = np.concatenate([reward,np.zeros_like(reward[...,0:1])], axis=-1)
         return reward
 
 class MinActReward:
@@ -51,12 +58,27 @@ class MinActReward:
     @returns reward with the shape (batch_size, trajectory_length)
     """
     def __call__(self, obs, action, laser_scan):
-        delta_steering = np.abs(action[:,:,0])
+        #raise NotImplementedError # TODO! this has to be adapted
+        # higher reward for smaller steering
+        # get the previous steering and add the action
+        #print(obs.keys())
+        prev_steer = obs["previous_action_steer"]
+
+        
+        raw_steering = prev_steer + action[:,0]
+        #print(raw_steering.shape)
+        delta_steering = np.abs(raw_steering)
         normalized_steering = (delta_steering / self.high_steering)**2
         inverse = 1 - normalized_steering
         reward = inverse
-        assert reward.shape == (obs.shape[0], obs.shape[1])
-        return reward
+        """
+        import matplotlib.pyplot as plt
+        plt.plot(reward)
+        plt.plot(raw_steering)
+        plt.legend(["Reward", "Steering"])
+        plt.show()
+        """
+        return np.expand_dims(reward, axis=0)
 
 
 # harder to test right now, so implementing & testing later
@@ -85,14 +107,17 @@ class MinLidarReward:
         #print("reward scan shape", reward.shape)
         # add a 1 dimension at the start
         reward = np.expand_dims(reward, axis=0)
-        assert reward.shape == (obs.shape[0], obs.shape[1])
+        # assert reward.shape == (obs.shape[0], obs.shape[1])
         return reward
 
 class LifetimeReward:
     def __init__(self):
         pass
     def __call__(self, obs, action, laser_scan):
-        reward = np.ones((obs.shape[0], obs.shape[1]))
+        if isinstance(obs, dict):
+            reward = np.ones((1, obs["poses_x"].shape[0]))
+        else:
+            reward = np.ones((obs.shape[0], obs.shape[1]))
         return reward
 
 class RacelineDeltaReward:
@@ -107,8 +132,12 @@ class RacelineDeltaReward:
         #print(self.raceline)
         #print(self.raceline.shape)
 
-    def __call__(self, obs, action, laser_scan) -> float:
-        pose = obs[...,:2]
+    def __call__(self, obs, action, laser_scan):
+        # check if obs is a dictionary
+        if isinstance(obs, dict):
+            pose = np.concat((obs["poses_x"], obs["poses_y"]), axis=-1) 
+        else:
+            pose = obs[...,:2]
         # batch_data shape becomes (batch_size, timesteps, 1, 2)
         # racing_line shape becomes (1, 1, points, 2)
         pose_exp = np.expand_dims(pose, axis=2)
@@ -136,6 +165,48 @@ class RacelineDeltaReward:
             plt.show()
         return reward
 
+class CheckpointReward:
+    def __init__(self, num_checkpoints: int=10):
+        self.num_checkpoints = num_checkpoints
+        self.checkpoints = np.linspace(0,1,num_checkpoints+1)
+    def __call__(self, obs, action, laser_scan):
+        # flatten obs progress
+        progress = obs["progress"].flatten()
+        # progress = obs["progress"][:]
+        #print(progress.shape)
+        # give reward if we pass a checkpoint (once)
+        differences = np.diff(progress)
+        loop_back_indices = np.where(differences < -0.5)[0]
+        for idx in loop_back_indices:
+            progress[idx+1:] += 1.0
+        #import matplotlib.pyplot as plt
+        #plt.plot(progress)
+        #plt.show()
+        #print(loop_back_indices)
+        #print(progress.shape)
+        # return array with ones where we pass a checkpoint
+        smallest = progress[0]
+        first_checkpoint = np.where(self.checkpoints > smallest)[0][0]
+        checkpoint_list = self.checkpoints[first_checkpoint] + self.checkpoints
+        latest_checkpoint = checkpoint_list[-1]
+        #print(checkpoint_list)
+        progress[-1] = 3
+        while latest_checkpoint < progress[-1]:
+            # concatenate to checkpoint list checkpoint_list + self.checkpoints
+            checkpoint_list = np.concatenate([checkpoint_list, checkpoint_list[-1] + self.checkpoints])
+            #print(checkpoint_list)
+            latest_checkpoint = checkpoint_list[-1]
+        rewards = np.zeros((1,progress.shape[0]))
+        for checkpoint in checkpoint_list:
+            larger = np.where(progress > checkpoint)[0]
+            if len(larger) == 0:
+                break
+            else:
+                rewards[0,larger[0]] += 1.0
+        #plt.plot(rewards[0])
+        #plt.plot(progress)
+        #plt.show()
+        return rewards
 
 # CURRENTLY DOES NOT WORK WITH LIDAR!
 #TODO! CAREFULL WHEN ADDING LIDAR TO NOT BREAK SOME REWARDS
@@ -150,19 +221,20 @@ class MixedReward:
     def add_rewards_based_on_config(self,config):
         self.rewards = []
         if config.has_progress_reward():
-            self.rewards.append(ProgressReward())
+            self.rewards.append((ProgressReward(),config.progress_reward_weight))
         if config.has_min_action_reward():
-            self.rewards.append(MinActReward(self.env.action_space.low[0][0],
-                                            self.env.action_space.high[0][0]))
+            self.rewards.append((MinActReward(self.env.action_space.low[0][0],
+                                            self.env.action_space.high[0][0]), config.min_action_weight))
         if config.has_min_lidar_reward():
-            self.rewards.append(MinLidarReward())
+            self.rewards.append((MinLidarReward(), config.min_lidar_weight))
         if config.has_raceline_delta_reward():
             print("track length", len(self.env.track.centerline.xs))
             print("track length", len(self.env.track.raceline.xs))
-            self.rewards.append(RacelineDeltaReward(self.env.track))
+            self.rewards.append((RacelineDeltaReward(self.env.track),config.raceline_delta_weight))
         if config.has_lifetime_reward():
-            self.rewards.append(LifetimeReward())
-            
+            self.rewards.append((LifetimeReward(), config.lifetime_weight))
+        if config.has_checkpoint_reward():
+            self.rewards.append((CheckpointReward(10), config.checkpoint_reward_weight))
         if config.has_min_steering_reward():
             pass
             #self.rewards.append(MinSteeringReward())
@@ -171,8 +243,15 @@ class MixedReward:
     Trajectory length needs to be at least > 1 for certain rewards.
     @param action: action with the shape (batch_size, trajectory_length, action_dim)
     """
+    # mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
     def __call__(self, obs, action, collision, done, laser_scan=None):
+        # print a deprecation warning that states obs should be dict
+
+
+        warnings.warn("Reward computation with flattened obs is deprecated. Please use the unflatten function to convert the flattened obs to a dict.")
         assert obs.shape[:-1] == action.shape[:-1], f" Obs shape is {obs.shape} and action shape is {action.shape}"
+        
+
         assert len(obs.shape) == 3
         #print(obs.shape)
         # assert obs.shape[-1] == 7
@@ -183,12 +262,46 @@ class MixedReward:
         # now we need to handle each of the rewards
         #print("***", obs.shape)
         for reward in self.rewards:
+
             rewards += reward(obs, action, laser_scan)
         #print(rewards.shape)
         # where collision is true set the reward to -10
-        rewards[collision] = self.config.collision_penalty
+        rewards[collision:] = self.config.collision_penalty
+
         return rewards, None
-        
+    
+    def __call__(self, obs:dict, action, collision, scan):
+        """
+        Takes in a single trajectory and computes the reward for it.
+
+        Args:
+            obs (dict): _description_
+            action (_type_): _description_
+            collision (_type_): _description_
+            scan (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        rewards = np.zeros((1, obs["poses_x"].shape[0]))
+        # now we need to handle each of the rewards
+        #print("***", obs.shape)
+        for reward, weight in self.rewards:
+            r = reward(obs, action, scan)
+            rewards += r * weight
+        #print(rewards.shape)
+        # where collision is true set the reward to -10
+        rewards[0,collision:] = self.config.collision_penalty
+        rewards[0,collision+1:] = 0.0 # set rest to 0.0
+        #print(rewards)
+        #print(rewards.shape)
+   
+        #import matplotlib.pyplot as plt
+        #plt.plot(rewards[0])
+        #plt.title("Rewards")
+        #plt.show()
+        #exit()
+        return rewards, None
 
 class StepMixedReward:
     def __init__(self, env, config):
@@ -279,6 +392,8 @@ def calculate_reward(config, dataset, env, track):
         elif batch[0].shape[1] == 0:
             continue
         else:
+            print("??")
+            print(mixedReward(batch[0], batch[1], batch[2], batch[3]))
             reward, _ = mixedReward(batch[0], batch[1], batch[2], batch[3], laser_scan=batch[4])
         #print(reward.shape)
         all_rewards = np.concatenate([all_rewards, reward], axis=1)
