@@ -171,7 +171,7 @@ class F1tenthDatasetEnv(F110Env):
             data_dir = data_dir / self.name
             data_dir = Path(data_dir)
         self.data_dir = data_dir
-
+        # print(self.data_dir)
         # check if dataset exists
         if (not(Path(f"{self.data_dir}.zip").exists()) or redownload) and not(skip_download):
             print(f"Attempting download - sometimes this does not work for me - you can always download the dataset from {self.dataset_url}")
@@ -324,12 +324,12 @@ class F1tenthDatasetEnv(F110Env):
             remove_agents = np.append(remove_agents, self.eval_agents)
 
         if zarr_path is None:
-            print("using default path")
+            # print("using default path")
             zarr_path = self.data_dir
-        print(f"path: {zarr_path}")
+        print(f"F110 ORL dataset path: {zarr_path}")
         root = zarr.open(zarr_path, mode='r')
         # print(root["model_name"].shape)
-        print(f"The following # of agents is contained in the dataset: {len([i for i in np.unique(root['model_name'][:])])}")
+        # print(f"The following # of agents is contained in the dataset: {len([i for i in np.unique(root['model_name'][:])])}")
         # load all from the zarr file
         temp_dataset = dict()
         if self.use_delta_actions:
@@ -423,7 +423,7 @@ class F1tenthDatasetEnv(F110Env):
         temp_dataset["scans"] = root["observations"]['lidar_occupancy'][:]
 
         indices_to_remove = np.array([])
-        # print("hi")
+        
         #print(indices_to_remove)
         #print(temp_dataset["timeouts"])
         
