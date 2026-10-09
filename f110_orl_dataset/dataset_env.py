@@ -86,7 +86,6 @@ class F1tenthDatasetEnv(F110Env):
         include_pose_time_diff = False,
         include_action_pose_time_diff = False,
         include_progress = True,
-        agent_config_dir = None,
         redownload = False, # debugging, if ds changes
         encode_cyclic = True,
         timesteps_to_include = None,
@@ -159,10 +158,6 @@ class F1tenthDatasetEnv(F110Env):
         self.set_previous_step_terminals = set_previous_step_terminals
         self.use_compute_termination = use_compute_termination
         self.angles =  np.abs(np.arange(-9,10,1) * angle_increment)
-        if agent_config_dir is None:
-            agent_config_dir = Path(__file__).parent / "agent_configs"
-        
-        print("Agent configs taken from:", agent_config_dir)
 
         if data_dir is None:
             data_dir = Path.home() / ".f110_rl_datasets" 
