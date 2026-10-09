@@ -39,27 +39,3 @@ def plot_rewards(dataset,reward_config, rewards_dict):
                         sub_keys=keys,
                         add_title = "; raceline",
                         path="test.png")
-    
-if __name__ == "__main__":
-    import gymnasium as gym
-
-    F110Env = gym.make('f110-sim-v1',
-    # only terminals are available as of tight now 
-                       clip_trajectory_length=(0,250),
-                       et_previous_step_terminals=25,
-                       reward_config="reward_progress.json",
-        **dict(name='f110-sim-v1',
-            config = dict(map="Infsaal2", num_agents=1),
-            render_mode="human")
-    )
-    zarr_path = f"/home/fabian/msc/f110_dope/ws_release/real_ds_127.zarr"
-    dataset =  F110Env.get_dataset(
-                zarr_path= zarr_path, 
-                
-                # only_agents = ["pure_pursuit2_0.8_1.2_raceline_og_3_0.6"],
-                #clip_trajectory_length =,#(0,500),
-                )
-    reward_config = "reward_progress.json"
-    rewards_dict = calculate_discounted_reward(dataset,reward_config)
-    print(rewards_dict)
-    plot_rewards(dataset,reward_config, rewards_dict)

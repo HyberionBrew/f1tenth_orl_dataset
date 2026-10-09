@@ -184,10 +184,11 @@ class F1tenthDatasetEnv(F110Env):
         rays = int(1080/SUBSAMPLE)
 
         state_dict = OrderedDict()
+        # copy, since keys are appended below and every env instance would otherwise extend the module-level list
         if encode_cyclic:
-            self.keys = obs_dictionary_keys_circular
+            self.keys = list(obs_dictionary_keys_circular)
         else:
-            self.keys = obs_dictionary_keys_og
+            self.keys = list(obs_dictionary_keys_og)
 
         for obs in self.keys:
             # if contained in the original observation space
@@ -261,6 +262,11 @@ class F1tenthDatasetEnv(F110Env):
         os.makedirs(extract_path, exist_ok=True)
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # archives that already contain a top-level '<name>/' folder are extracted next to the zip,
+            # otherwise we would end up with '<name>/<name>/'
+            top_level = os.path.basename(extract_path) + "/"
+            if all(file.startswith(top_level) for file in zip_ref.namelist()):
+                extract_path = os.path.dirname(extract_path)
             # Extract all the contents into the specified directory
             for file in tqdm(iterable=zip_ref.namelist(), total=len(zip_ref.namelist()), desc='Extracting '):
                 zip_ref.extract(member=file, path=extract_path)

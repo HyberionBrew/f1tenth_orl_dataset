@@ -133,14 +133,6 @@ if __name__ == "__main__":
     parser.add_argument('--path', type=str, default="dataset.zarr", help="dataset name")
     parser.add_argument('--track_path', type=str, default="Infsaal_centerline.csv", help="track name")
     args = parser.parse_args()
-    import gymnasium as gym
-    import f110_orl_dataset
-    F110Env = gym.make('f110-real-v0',
-    # only terminals are available as of tight now 
-        **dict(name='f110-real-v0',
-            config = dict(map="Infsaal", num_agents=1),
-            render_mode="human")
-    )
     root = zarr.open(args.path, mode='wr')
     track = Track(args.track_path)
     progress = Progress(track, lookahead=200)

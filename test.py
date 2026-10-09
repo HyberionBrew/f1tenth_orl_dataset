@@ -2,30 +2,28 @@ import f110_gym
 import f110_orl_dataset
 import gymnasium as gym
 import numpy as np
-import matplotlib.pyplot as plt
 
-F110Env = gym.make('f110-real-v1',
-                   encode_cyclic=True,
-                   flatten_obs=True,
-                   timesteps_to_include=(0,250),
-                    use_delta_actions=False, # control if actions are deltas or absolute
-                   reward_config="reward_progress.json",
-        **dict(name='f110-real-v1',
-            config = dict(map="Infsaal2", num_agents=1),
+# loads both datasets with the settings of the F110 OPE benchmark (downloads them on first use)
+for name, reward_config in [("f110-real-stoch-v2", "reward_progress.json"), ("f110-sim-stoch-v2", None)]:
+    F110Env = gym.make(name,
+                       encode_cyclic=True,
+                       flatten_obs=True,
+                       timesteps_to_include=(0,250),
+                       use_delta_actions=True, # control if actions are deltas or absolute
+                       set_terminals=True,
+                       reward_config=reward_config, # f110-sim-stoch-v2 has no new_rewards, see relabel_reward.py
+                       include_time_obs=True,
+                       include_progress=False,
+                       use_compute_termination=True,
+                       remove_cons_terminals=True,
+        **dict(name=name,
+            config = dict(map="Infsaal3", num_agents=1, params=dict(vmin=0.0, vmax=2.0)),
               render_mode="human")
-    ) 
-
-#print(F110Env.observation_space_orig)
-ds = F110Env.get_dataset(
-    #only_agents=["StochasticContinousFTGAgent_0.15_5_0.2_0.15_2.0"],)
-)
-
-print(ds["actions"][:40])
-print(ds["model_name"][:10])
-plt.plot(ds["observations"][:1000,4:7])
-plt.plot(ds["timeouts"][:1000])
-plt.plot(ds["actions"][:1000])
-plt.plot(ds["observations"][:1000,-1])
-print(F110Env.keys)
-plt.legend(["ang_vels_z", "linear_vels_x", "linear_vels_y", "timeout","raw_action_steering", "raw_action_speed"])
-plt.show()
+    )
+    ds = F110Env.get_dataset()
+    finished = ds["terminals"] | ds["timeouts"]
+    print(name)
+    print("  observation keys:", F110Env.keys)
+    print("  rows:", len(ds["observations"]), "episodes:", int(finished.sum()))
+    print("  agents:", len(np.unique(ds["model_name"])), "of which OPE target policies:", len(F110Env.eval_agents))
+    print("  actions", ds["actions"].shape, "log_probs", ds["log_probs"].shape, "rewards", ds["rewards"].shape)
